@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Map Weather — Philippines</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+   
+   <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0b1622;
+      --surface: #111f2e;
+      --card: #162233;
+      --border: rgba(255,255,255,0.07);
+      --text: #e2f0fb;
+      --muted: #6b8fa8;
+      --accent: #38bdf8;
+      --accent2: #0284c7;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --purple: #a78bfa;
+    }
+
+    .light {
+      --bg: #eef4fa;
+      --surface: #ffffff;
+      --card: #f1f7fc;
+      --border: rgba(0,0,0,0.08);
+      --text: #0f2033;
+      --muted: #5a7a95;
+      --accent: #0284c7;
+    }
+
+    html, body { height: 100%; font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text); overflow: hidden; }
+
+    /* ── TOPBAR ── */
+    #topbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      height: 56px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px; gap: 16px;
+    }
+    .logo {
+      font-size: 18px; font-weight: 700; letter-spacing: 0.5px;
+      color: var(--accent); white-space: nowrap;
+    }
+    .logo span { color: var(--text); font-weight: 400; }
+
+    .search-wrap {
+      flex: 1; max-width: 360px;
+      position: relative; display: flex; align-items: center;
+    }
+    #searchInput {
+      width: 100%; padding: 8px 16px 8px 38px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 999px; color: var(--text); font-family: 'Outfit', sans-serif;
+      font-size: 13px; outline: none; transition: border-color 0.2s;
+    }
+    #searchInput::placeholder { color: var(--muted); }
+    #searchInput:focus { border-color: var(--accent); }
+    .search-icon {
+      position: absolute; left: 12px; font-size: 14px; color: var(--muted); pointer-events: none;
+    }
+    #searchBtn {
+      position: absolute; right: 8px;
+      background: var(--accent); border: none; color: #fff;
+      padding: 4px 12px; border-radius: 999px; font-size: 12px;
+      font-family: 'Outfit', sans-serif; cursor: pointer; transition: background 0.2s;
+    }
+    #searchBtn:hover { background: var(--accent2); }
+
+    .topbar-actions { display: flex; align-items: center; gap: 10px; }
+    .icon-btn {
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--muted); width: 36px; height: 36px; border-radius: 10px;
+      cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── MAP ── */
+    #map {
+      position: fixed; top: 56px; left: 0; right: 0; bottom: 0;
+      z-index: 1;
+    }
+
+    /* Leaflet tile dark filter */
+    .dark-tiles { filter: brightness(0.7) saturate(0.8) hue-rotate(180deg) invert(1); }
+
+    /* ── SIDE PANEL ── */
+    #panel {
+      position: fixed; top: 56px; right: 0; bottom: 0;
+      width: 300px; z-index: 500;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow-y: auto;
+    }
+    #panel.open { transform: translateX(0); }
+
+    .panel-header {
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-city { font-size: 20px; font-weight: 700; color: var(--text); }
+    .panel-region { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    .panel-main {
+      padding: 16px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-temp { font-size: 52px; font-weight: 300; color: var(--text); line-height: 1; }
+    .panel-temp sup { font-size: 20px; vertical-align: super; color: var(--muted); }
+    .panel-weather-info { text-align: right; }
+    .panel-icon { font-size: 42px; }
+    .panel-condition { font-size: 13px; color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+
+    .stats-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 10px; padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .stat {
+      background: var(--card); border-radius: 10px;
+      padding: 12px; border: 1px solid var(--border);
+    }
+    .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+    .stat-value { font-size: 20px; font-weight: 600; color: var(--text); }
+    .stat-unit { font-size: 11px; color: var(--muted); font-weight: 400; }
+
+    .alert-wrap { padding: 14px 20px; border-bottom: 1px solid var(--border); }
+    .alert {
+      padding: 12px 14px; border-radius: 10px;
+      font-size: 13px; font-weight: 500; line-height: 1.5;
+      display: flex; align-items: flex-start; gap: 8px;
+    }
+    .alert.rain { background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.25); color: #7dd3fc; }
+    .alert.storm { background: rgba(167,139,250,0.12); border: 1px solid rgba(167,139,250,0.25); color: #c4b5fd; }
+    .alert.clear { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.25); color: #86efac; }
+    .alert.hot { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.25); color: #fcd34d; }
+    .alert-icon { font-size: 18px; flex-shrink: 0; }
+
+    .forecast-wrap { padding: 14px 20px; flex: 1; }
+    .forecast-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+    .forecast-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 12px; background: var(--card); border-radius: 8px;
+      margin-bottom: 6px; font-size: 13px; border: 1px solid var(--border);
+    }
+    .fc-day { color: var(--muted); width: 70px; }
+    .fc-icon { font-size: 16px; }
+    .fc-temp { font-weight: 600; color: var(--text); }
+
+    .close-btn {
+      position: absolute; top: 14px; right: 14px;
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--muted); width: 28px; height: 28px; border-radius: 8px;
+      cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    .close-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+    /* ── LOADING SPINNER ── */
+    #loader {
+      position: fixed; inset: 0; z-index: 2000;
+      background: var(--bg);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    }
+    .spinner {
+      width: 40px; height: 40px; border-radius: 50%;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loader p { color: var(--muted); font-size: 14px; }
+
+    /* ── TOAST ── */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--text); padding: 10px 20px; border-radius: 999px;
+      font-size: 13px; z-index: 3000;
+      opacity: 0; transition: opacity 0.3s; pointer-events: none;
+      white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+
+    /* ── LEAFLET CUSTOM MARKER ── */
+    .weather-marker {
+      background: var(--surface); border: 2px solid var(--accent);
+      border-radius: 8px; padding: 4px 8px;
+      font-family: 'Outfit', sans-serif; font-size: 12px; font-weight: 600;
+      color: var(--text); white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    /* ── LOCATE BTN ── */
+    #locateBtn {
+      position: fixed; bottom: 30px; right: 320px;
+      z-index: 600;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 999px;
+      padding: 10px 18px; font-family: 'Outfit', sans-serif;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      box-shadow: 0 4px 20px rgba(56,189,248,0.4);
+      transition: all 0.2s; display: flex; align-items: center; gap: 6px;
+    }
+    #locateBtn:hover { background: var(--accent2); transform: translateY(-2px); }
+    #locateBtn.panel-closed { right: 20px; }
+
+    /* ── LAYER CONTROLS ── */
+    #layerControl {
+      position: fixed; top: 70px; left: 12px; z-index: 600;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .layer-btn {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--muted); padding: 8px 14px; border-radius: 10px;
+      font-family: 'Outfit', sans-serif; font-size: 12px; font-weight: 500;
+      cursor: pointer; transition: all 0.2s; white-space: nowrap;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .layer-btn:hover, .layer-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(56,189,248,0.08); }
+
+    @media (max-width: 600px) {
+      #panel { width: 100%; }
+      #locateBtn { right: 16px; bottom: 16px; }
+      #locateBtn.panel-closed { right: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div id="loader">
+  <div class="spinner"></div>
+  <p>Loading Map Weather...</p>
+</div>
+
+<!-- TOPBAR -->
+<div id="topbar">
+  <div class="logo">MAP <span>WEATHER</span></div>
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Search city in Philippines..." />
+    <button id="searchBtn">Go</button>
+  </div>
+  <div class="topbar-actions">
+    <button class="icon-btn" id="themeBtn" title="Toggle theme">🌚</button>
+    <button class="icon-btn" id="refreshBtn" title="Refresh">↻</button>
+  </div>
+</div>
+
+<!-- MAP -->
+<div id="map"></div>
+
+<!-- LAYER CONTROLS -->
+<div id="layerControl">
+  <button class="layer-btn active" onclick="setLayer('default')">🗺️ Map</button>
+  <button class="layer-btn" onclick="setLayer('satellite')">🛰️ Satellite</button>
+  <button class="layer-btn" onclick="setLayer('terrain')">🗻 Terrain</button>
+</div>
+
+<!-- SIDE PANEL -->
+<div id="panel">
+  <button class="close-btn" onclick="closePanel()">✕</button>
+  <div class="panel-header">
+    <div class="panel-city" id="panelCity">Loading...</div>
+    <div class="panel-region" id="panelRegion">Philippines</div>
+  </div>
+  <div class="panel-main">
+    <div class="panel-temp" id="panelTemp">--<sup>°C</sup></div>
+    <div class="panel-weather-info">
+      <div class="panel-icon" id="panelIcon">⏳</div>
+      <div class="panel-condition" id="panelCondition">Fetching...</div>
+    </div>
+  </div>
+  <div class="stats-grid">
+    <div class="stat"><div class="stat-label">Feels Like</div><div class="stat-value" id="statFeels">--<span class="stat-unit">°C</span></div></div>
+    <div class="stat"><div class="stat-label">Humidity</div><div class="stat-value" id="statHumidity">--<span class="stat-unit">%</span></div></div>
+    <div class="stat"><div class="stat-label">Wind Speed</div><div class="stat-value" id="statWind">--<span class="stat-unit"> km/h</span></div></div>
+    <div class="stat"><div class="stat-label">Rain Chance</div><div class="stat-value" id="statRain">--<span class="stat-unit">%</span></div></div>
+  </div>
+  <div class="alert-wrap">
+    <div class="alert" id="alertBox">
+      <span class="alert-icon">⏳</span>
+      <span id="alertMsg">Fetching weather data...</span>
+    </div>
+  </div>
+  <div class="forecast-wrap">
+    <div class="forecast-title">7-Day Forecast</div>
+    <div id="forecastList">
+      <div style="color: var(--muted); font-size: 13px; padding: 10px 0;">Loading forecast...</div>
+    </div>
+  </div>
+</div>
+
+<!-- LOCATE BUTTON -->
+<button id="locateBtn" class="panel-closed" onclick="locateMe()">📍 My Location</button>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  let map, tileLayer, isDark = true, panelOpen = false;
+  let currentMarker = null;
+
+  const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  const weatherCodes = {
+    0: {label:'Clear Sky', icon:'☀️'},
+    1: {label:'Mainly Clear', icon:'🌤️'},
+    2: {label:'Partly Cloudy', icon:'⛅'},
+    3: {label:'Overcast', icon:'☁️'},
+    45: {label:'Foggy', icon:'🌫️'},
+    48: {label:'Icy Fog', icon:'🌫️'},
+    51: {label:'Light Drizzle', icon:'🌦️'},
+    53: {label:'Drizzle', icon:'🌦️'},
+    55: {label:'Heavy Drizzle', icon:'🌧️'},
+    61: {label:'Light Rain', icon:'🌧️'},
+    63: {label:'Rain', icon:'🌧️'},
+    65: {label:'Heavy Rain', icon:'🌧️'},
+    71: {label:'Light Snow', icon:'🌨️'},
+    73: {label:'Snow', icon:'❄️'},
+    75: {label:'Heavy Snow', icon:'❄️'},
+    80: {label:'Rain Showers', icon:'🌦️'},
+    81: {label:'Showers', icon:'🌧️'},
+    82: {label:'Heavy Showers', icon:'⛈️'},
+    95: {label:'Thunderstorm', icon:'⛈️'},
+    96: {label:'Thunderstorm', icon:'⛈️'},
+    99: {label:'Heavy Thunderstorm', icon:'🌩️'},
+  };
+
+  const tileLayers = {
+    default: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    terrain: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+  };
+  let currentLayer = 'default';
+
+  function initMap() {
+    map = L.map('map', {
+      center: [12.5, 122.0],
+      zoom: 6,
+      zoomControl: false,
+    });
+
+    L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+    tileLayer = L.tileLayer(tileLayers.default, {
+      attribution: '© OpenStreetMap contributors',
+      className: isDark ? 'dark-tiles' : '',
+    }).addTo(map);
+
+    map.on('click', function(e) {
+      fetchWeather(e.latlng.lat, e.latlng.lng);
+    });
+
+    setTimeout(() => {
+      document.getElementById('loader').style.display = 'none';
+      showToast('Click anywhere on the map to get weather!');
+    }, 1200);
+  }
+
+  function setLayer(type) {
+    currentLayer = type;
+    map.removeLayer(tileLayer);
+    tileLayer = L.tileLayer(tileLayers[type], {
+      attribution: '© OpenStreetMap',
+      className: isDark && type === 'default' ? 'dark-tiles' : '',
+    }).addTo(map);
+    document.querySelectorAll('.layer-btn').forEach((b, i) => {
+      b.classList.toggle('active', ['default','satellite','terrain'][i] === type);
+    });
+  }
+
+  async function fetchWeather(lat, lng) {
+    showToast('Fetching weather...');
+    openPanel();
+
+    document.getElementById('panelCity').textContent = 'Loading...';
+    document.getElementById('panelRegion').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    document.getElementById('panelTemp').innerHTML = '--<sup>°C</sup>';
+    document.getElementById('panelIcon').textContent = '⏳';
+    document.getElementById('panelCondition').textContent = 'Fetching...';
+
+    try {
+      const [weatherRes, geoRes] = await Promise.all([
+        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,apparent_temperature,relative_humidity_2m,windspeed_10m,weathercode,precipitation_probability&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FManila&forecast_days=7`),
+        fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`)
+      ]);
+
+      const weather = await weatherRes.json();
+      const geo = await geoRes.json();
+
+      const c = weather.current;
+      const d = weather.daily;
+
+      const code = c.weathercode;
+      const info = weatherCodes[code] || {label: 'Unknown', icon: '🌡️'};
+      const temp = Math.round(c.temperature_2m);
+      const feels = Math.round(c.apparent_temperature);
+      const humidity = c.relative_humidity_2m;
+      const wind = Math.round(c.windspeed_10m);
+      const rain = c.precipitation_probability || 0;
+
+      const cityName = geo.address?.city || geo.address?.town || geo.address?.municipality || geo.address?.county || 'Unknown Location';
+      const regionName = geo.address?.state || geo.address?.region || 'Philippines';
+
+      document.getElementById('panelCity').textContent = cityName;
+      document.getElementById('panelRegion').textContent = regionName;
+      document.getElementById('panelTemp').innerHTML = `${temp}<sup>°C</sup>`;
+      document.getElementById('panelIcon').textContent = info.icon;
+      document.getElementById('panelCondition').textContent = info.label;
+      document.getElementById('statFeels').innerHTML = `${feels}<span class="stat-unit">°C</span>`;
+      document.getElementById('statHumidity').innerHTML = `${humidity}<span class="stat-unit">%</span>`;
+      document.getElementById('statWind').innerHTML = `${wind}<span class="stat-unit"> km/h</span>`;
+      document.getElementById('statRain').innerHTML = `${rain}<span class="stat-unit">%</span>`;
+
+      setAlert(code, rain, temp);
+      setForecast(d);
+      placeMarker(lat, lng, temp, info.icon);
+      showToast(`Weather loaded for ${cityName}!`);
+
+    } catch(err) {
+      document.getElementById('panelCity').textContent = 'Error loading data';
+      showToast('Failed to fetch weather. Try again.');
+    }
+  }
+
+  function setAlert(code, rain, temp) {
+    const box = document.getElementById('alertBox');
+    const msg = document.getElementById('alertMsg');
+    let type, icon, text;
+
+    if (code >= 95) {
+      type = 'storm'; icon = '⚠️';
+      text = 'Thunderstorm warning! Stay indoors and avoid open areas.';
+    } else if (code >= 61 || rain >= 70) {
+      type = 'rain'; icon = '🌂';
+      text = 'Rain expected today! Don\'t forget to bring your umbrella.';
+    } else if (temp >= 36) {
+      type = 'hot'; icon = '🌡️';
+      text = 'Extreme heat today! Stay hydrated and avoid direct sun.';
+    } else if (code <= 1) {
+      type = 'clear'; icon = '☀️';
+      text = 'Clear and sunny! Great time to head out today.';
+    } else {
+      type = 'clear'; icon = '🌤️';
+      text = 'Weather looks okay today. Enjoy your day!';
+    }
+
+    box.className = `alert ${type}`;
+    box.querySelector('.alert-icon').textContent = icon;
+    msg.textContent = text;
+  }
+
+  function setForecast(d) {
+    const list = document.getElementById('forecastList');
+    list.innerHTML = '';
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(d.time[i]);
+      const day = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : DAYS[date.getDay()];
+      const code = d.weathercode[i];
+      const info = weatherCodes[code] || {icon:'🌡️'};
+      const max = Math.round(d.temperature_2m_max[i]);
+      const min = Math.round(d.temperature_2m_min[i]);
+      list.innerHTML += `
+        <div class="forecast-item">
+          <span class="fc-day">${day}</span>
+          <span class="fc-icon">${info.icon}</span>
+          <span class="fc-temp">${max}° / <span style="color:var(--muted);font-weight:400">${min}°</span></span>
+        </div>`;
+    }
+  }
+
+  function placeMarker(lat, lng, temp, icon) {
+    if (currentMarker) map.removeLayer(currentMarker);
+    const markerHtml = `<div class="weather-marker">${icon} ${temp}°C</div>`;
+    currentMarker = L.marker([lat, lng], {
+      icon: L.divIcon({ html: markerHtml, className: '', iconAnchor: [40, 10] })
+    }).addTo(map);
+  }
+
+  function openPanel() {
+    panelOpen = true;
+    document.getElementById('panel').classList.add('open');
+    document.getElementById('locateBtn').classList.remove('panel-closed');
+  }
+
+  function closePanel() {
+    panelOpen = false;
+    document.getElementById('panel').classList.remove('open');
+    document.getElementById('locateBtn').classList.add('panel-closed');
+  }
+
+  function locateMe() {
+    if (!navigator.geolocation) { showToast('Geolocation not supported.'); return; }
+    showToast('Getting your location...');
+    navigator.geolocation.getCurrentPosition(pos => {
+      const { latitude, longitude } = pos.coords;
+      map.setView([latitude, longitude], 12);
+      fetchWeather(latitude, longitude);
+    }, () => { showToast('Could not get your location.'); });
+  }
+
+  function toggleTheme() {
+    isDark = !isDark;
+    document.body.classList.toggle('light', !isDark);
+    document.getElementById('themeBtn').textContent = isDark ? '🌚' : '🌞';
+    if (currentLayer === 'default') {
+      map.removeLayer(tileLayer);
+      tileLayer = L.tileLayer(tileLayers.default, {
+        attribution: '© OpenStreetMap',
+        className: isDark ? 'dark-tiles' : '',
+      }).addTo(map);
+    }
+  }
+
+  document.getElementById('themeBtn').addEventListener('click', toggleTheme);
+  document.getElementById('refreshBtn').addEventListener('click', () => location.reload());
+
+  document.getElementById('searchInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') searchCity();
+  });
+  document.getElementById('searchBtn').addEventListener('click', searchCity);
+
+  async function searchCity() {
+    const q = document.getElementById('searchInput').value.trim();
+    if (!q) return;
+    showToast('Searching...');
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + ' Philippines')}&format=json&limit=1`);
+      const data = await res.json();
+      if (data.length === 0) { showToast('City not found. Try another name.'); return; }
+      const { lat, lon } = data[0];
+      map.setView([parseFloat(lat), parseFloat(lon)], 12);
+      fetchWeather(parseFloat(lat), parseFloat(lon));
+    } catch { showToast('Search failed. Try again.'); }
+  }
+
+  let toastTimer;
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  window.addEventListener('load', initMap);
+</script>
+</body>
+</html>
